@@ -1,0 +1,103 @@
+{
+  "feature": "meta-graph-api",
+  "version": "1.0.0",
+  "created_at": "2026-04-02T00:00:00Z",
+
+  "meta_api_requirements": {
+    "requires_sandbox": true,
+    "sandbox_test_user_id": "",
+    "rate_limit_dimension": "D15",
+    "webhook_idempotency_key": "mid"
+  },
+
+  "execution_order": [
+    "sandbox-config",
+    "rate-limit-manager",
+    "webhook-idempotency",
+    "graph-api-client",
+    "webhook-controller"
+  ],
+
+  "tasks": {
+    "sandbox-config": {
+      "status": "completed",
+      "file": "tasks/sandbox-config.md",
+      "depends_on": [],
+      "tests_passed": 5,
+      "description": "SandboxGuard — pre-flight enforcement for all Graph API calls",
+      "blocking_override": "Meta Graph API Extension §1 — must complete before any task making outbound calls"
+    },
+    "rate-limit-manager": {
+      "status": "completed",
+      "file": "tasks/rate-limit-manager.md",
+      "depends_on": [],
+      "tests_passed": 8,
+      "description": "D15 — X-App-Usage parsing, exponential backoff with jitter, Retry-After support",
+      "review_dimension": "D15"
+    },
+    "webhook-idempotency": {
+      "status": "completed",
+      "file": "tasks/webhook-idempotency.md",
+      "depends_on": [],
+      "tests_passed": 4,
+      "description": "IdempotencyStore + MessageProcessor — mid-keyed deduplication",
+      "blocking_override": "Meta Graph API Extension §3 — idempotency test MUST precede handler implementation"
+    },
+    "graph-api-client": {
+      "status": "completed",
+      "file": "tasks/graph-api-client.md",
+      "depends_on": ["sandbox-config", "rate-limit-manager"],
+      "tests_passed": 4,
+      "notes": "httpClient injected as dependency — node-fetch v2 in tests, native fetch in production. Required because nock does not intercept Node 22 native fetch.",
+      "description": "Outbound HTTP client integrating SandboxGuard and RateLimitManager"
+    },
+    "webhook-controller": {
+      "status": "completed",
+      "file": "tasks/webhook-controller.md",
+      "depends_on": ["webhook-idempotency", "sandbox-config"],
+      "tests_passed": 4,
+      "description": "Express webhook endpoint — hub challenge + message ingestion"
+    }
+  },
+
+  "implementation_summary": {
+    "total_tests": 25,
+    "total_tests_passing": 25,
+    "source_files": [
+      "src/sandbox-guard.ts",
+      "src/rate-limit-manager.ts",
+      "src/idempotency-store.ts",
+      "src/message-processor.ts",
+      "src/graph-api-client.ts",
+      "src/app.ts"
+    ],
+    "deviations_from_plan": [
+      "graph-api-client: httpClient made injectable (fetch dep) — nock does not intercept Node 22 native fetch; node-fetch v2 injected in tests, native fetch used in production. This is a design improvement, not a regression."
+    ]
+  },
+
+  "review_matrix_extensions": {
+    "D15": {
+      "tier": 2,
+      "label": "Graph API Resilience",
+      "checks": [
+        "Parses X-App-Usage header (call_count, total_cputime, total_time)",
+        "Triggers preemptive backoff when any axis >= 80%",
+        "Implements exponential backoff with full jitter on 429",
+        "Respects Retry-After header — uses its value with absolute priority",
+        "Zero hardcoded retry intervals anywhere in codebase"
+      ],
+      "failure_example": "Ignoring X-App-Usage and retrying immediately after a rate-limit warning"
+    }
+  },
+
+  "ci_enforcement": {
+    "rules": [
+      "Tests that hit graph.facebook.com without sandbox:true fixture are blocking violations",
+      "Any sleep(N) or setTimeout(fn, N) where N is a literal number must fail lint",
+      "IG_SANDBOX_MODE=true must be set in all CI test environments"
+    ]
+  },
+
+  "next_action": "/code-forge:review"
+}
