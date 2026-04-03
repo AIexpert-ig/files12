@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios'; // Added AxiosError for type safety
 
 dotenv.config();
 
@@ -44,7 +44,8 @@ app.post('/webhook', async (req: Request, res: Response) => {
     const body = req.body;
 
     if (body.object === 'instagram') {
-        body.entry.forEach(async (entry: any) => {
+        // Use Promise.all to handle async forEach properly
+        await Promise.all(body.entry.map(async (entry: any) => {
             if (!entry.messaging) return;
             const messagingEvent = entry.messaging[0];
             const senderId = messagingEvent.sender.id;
@@ -62,7 +63,7 @@ app.post('/webhook', async (req: Request, res: Response) => {
 
             // SEND RESPONSE (The "Voice")
             await sendBotResponse(senderId, `Marriott Luxury Assistant: I received "${messageText}". How can I elevate your stay?`);
-        });
+        }));
         res.status(200).send('EVENT_RECEIVED');
     } else {
         res.sendStatus(404);
@@ -75,8 +76,13 @@ async function sendBotResponse(recipientId: string, text: string) {
             recipient: { id: recipientId },
             message: { text: text }
         });
-    } catch (error) {
-        console.error('Error sending message:', error?.response?.data || error.message);
+    } catch (error: unknown) {
+        // Logic: Type Guarding 'error' to access response properties
+        if (axios.isAxiosError(error)) {
+            console.error('Error sending message:', error.response?.data || error.message);
+        } else {
+            console.error('An unexpected error occurred:', error);
+        }
     }
 }
 
