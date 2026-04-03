@@ -13,6 +13,18 @@ const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const TEST_IDS = process.env.IG_TEST_USER_IDS?.split(',') || [];
 
+// 0. COMPLIANCE ROUTES (Required by Meta)
+app.get('/privacy', (req: Request, res: Response) => {
+    res.send(`
+        <h1>Privacy Policy</h1>
+        <p>This Instagram Bot provides concierge services for Marriott luxury stays.</p>
+        <p>Data is only used to facilitate real-time guest communication.</p>
+    `);
+});
+
+app.get('/deauth', (req: Request, res: Response) => res.status(200).send('Deauthorized'));
+app.get('/delete-data', (req: Request, res: Response) => res.status(200).send('Data deletion requested'));
+
 // 1. WEBHOOK VERIFICATION (The "Handshake")
 app.get('/webhook', (req: Request, res: Response) => {
     const mode = req.query['hub.mode'];
@@ -33,11 +45,14 @@ app.post('/webhook', async (req: Request, res: Response) => {
 
     if (body.object === 'instagram') {
         body.entry.forEach(async (entry: any) => {
+            if (!entry.messaging) return;
             const messagingEvent = entry.messaging[0];
             const senderId = messagingEvent.sender.id;
-            const messageText = messagingEvent.message.text;
+            const messageText = messagingEvent.message?.text;
 
-            // SandboxGuard: Only respond to Ahmed (or registered testers)
+            if (!messageText) return;
+
+            // SandboxGuard: Only respond to authorized testers
             if (process.env.IG_SANDBOX_MODE === 'true' && !TEST_IDS.includes(senderId)) {
                 console.log(`Blocked message from unauthorized ID: ${senderId}`);
                 return;
@@ -61,7 +76,7 @@ async function sendBotResponse(recipientId: string, text: string) {
             message: { text: text }
         });
     } catch (error) {
-        console.error('Error sending message:', error);
+        console.error('Error sending message:', error?.response?.data || error.message);
     }
 }
 
