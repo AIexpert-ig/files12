@@ -1,9 +1,9 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express, { Request, Response } from 'express';
 import bodyParser from 'body-parser';
-import dotenv from 'dotenv';
 import axios, { AxiosError } from 'axios';
-
-dotenv.config();
 
 const app = express();
 app.use(bodyParser.json());
